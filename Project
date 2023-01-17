@@ -1,0 +1,225 @@
+######          Market price of Bitcoin         ######
+rm(list = ls())
+
+## Load all packages
+install.packages("ggplot2")
+install.packages("corrplot")
+install.packages("caret")
+install.packages("e1071")
+install.packages("car")
+install.packages("tidyverse")
+
+library(ggplot2)
+library(dplyr)
+library(corrplot)
+library(lmtest)
+library(caret)
+library(e1071)
+library(car)
+library (tidyverse)
+
+## Set work directory
+setwd("~/Downloads/BTC")
+
+## Import data and rename variables
+Volatility = data.frame(read.csv("Volatility.csv"))
+colnames(Volatility) = c("Date", "Volatility")
+
+SP500 = data.frame(read.csv("S&P.csv"))
+colnames(SP500) = c("Date", "SP500")
+
+CL = data.frame(read.csv("Crude Oil.csv"))
+colnames(CL) = c("Date","CL")
+
+GLD = data.frame(read.csv("GLD.csv"))
+colnames(GLD) = c("Date", "GLD")
+
+JPY_USD = data.frame(read.csv("JPY_USD.csv"))
+colnames(JPY_USD) = c("Date", "JPY_USD")
+
+EUR_USD = data.frame(read.csv("EUR_USD.csv"))
+colnames(EUR_USD) = c("Date", "EUR_USD")
+
+GBP_USD = data.frame(read.csv("GBP_USD.csv"))
+colnames(GBP_USD) = c("Date", "GBP_USD")
+
+Inflation = data.frame(read.csv("Inflation.csv"))
+colnames(Inflation) = c("Date", "Inflation")
+
+Search = data.frame(read.csv("google.csv"))  
+colnames(Search) = c("Date", "Search")
+
+NTrans = data.frame(read.csv("n-transactions-total.csv"))  
+colnames(NTrans) = c("Date", "NTrans")
+
+AvgBlockSize = data.frame(read.csv("avg-block-size.csv"))  
+colnames(AvgBlockSize) = c("Date", "AvgBlockSize")
+
+TransFee = data.frame(read.csv("transaction-fees.csv")) 
+colnames(TransFee) = c("Date", "TransFee")
+
+MineDif = data.frame(read.csv("difficulty.csv")) 
+colnames(MineDif) = c("Date", "MineDif")
+
+PriceVolu = data.frame(read.csv("price + volume.csv")) 
+colnames(PriceVolu) = c("Date", "Price", "Volume")
+
+## Transfer date format
+Volatility$Date = as.Date(Volatility$Date)
+SP500$Date = as.Date(SP500$Date)
+CL$Date = as.Date(CL$Date)
+GLD$Date = as.Date(GLD$Date)
+JPY_USD$Date = as.Date(JPY_USD$Date)
+EUR_USD$Date = as.Date(EUR_USD$Date)
+GBP_USD$Date = as.Date(GBP_USD$Date)
+Inflation$Date = as.Date(Inflation$Date)
+Search$Date = as.Date(Search$Date)
+NTrans$Date = as.Date(NTrans$Date)
+AvgBlockSize$Date = as.Date(AvgBlockSize$Date)
+TransFee$Date = as.Date(TransFee$Date)
+MineDif$Date = as.Date(format(as.Date(MineDif$Date), "%Y-%m-01"))
+PriceVolu$Date = as.Date(format(as.Date(PriceVolu$Date), "%Y-%m-01"))
+
+## Convert to TransFee, AvgBlockSize and NTrans data to monthly:
+TransFee <- aggregate(TransFee$TransFee, list(format(TransFee$Date, "%Y-%m-01")), mean)
+colnames(TransFee) = c("Date", "TransFee")
+TransFee$Date = as.Date(TransFee$Date)
+
+AvgBlockSize <- aggregate(AvgBlockSize$AvgBlockSize, list(format(AvgBlockSize$Date, "%Y-%m-01")), mean)
+colnames(AvgBlockSize) = c("Date", "AvgBlockSize")
+AvgBlockSize$Date = as.Date(AvgBlockSize$Date)
+
+NTrans <- aggregate(NTrans$NTrans, list(format(NTrans$Date, "%Y-%m-01")), mean)
+colnames(NTrans) = c("Date", "NTrans")
+NTrans$Date = as.Date(NTrans$Date)
+
+## Merge all variables
+Table <- left_join(JPY_USD, MineDif, by = "Date") %>%
+  left_join(., Volatility, by='Date') %>% 
+  left_join(., TransFee, by='Date') %>%
+  left_join(., PriceVolu, by='Date') %>%
+  left_join(., AvgBlockSize, by='Date') %>%
+  left_join(., NTrans, by='Date') %>%
+  left_join(., Search, by='Date') %>%
+  left_join(., Inflation, by='Date') %>%
+  left_join(., GBP_USD, by='Date') %>%
+  left_join(., EUR_USD, by='Date') %>%
+  left_join(., GLD, by='Date') %>%
+  left_join(., CL, by='Date') %>%
+  left_join(., SP500, by='Date')
+
+## Check table data type
+str(Table) 
+
+## Trasfer data as number
+Table$Search = as.numeric(Table$Search)
+Table$Inflation = as.numeric(as.character(Table$Inflation),na.rm = FALSE) # sometime may has warning, just re-run it
+str(Table) 
+
+## Check statistic of table
+dim(Table) # Dimension of the table
+Table[1:5,]  # first 5 rows
+summary(Table)
+
+## Set variables
+Price   <- Table$Price 
+Volatility   <- Table$Volatility
+SP500   <- Table$SP500
+CL   <- Table$CL
+GLD   <- Table$GLD
+JPY_USD   <- Table$JPY_USD
+EUR_USD   <- Table$EUR_USD
+GBP_USD   <- Table$GBP_USD
+Inflation   <- Table$Inflation
+Search   <- Table$Search
+NTrans   <- Table$NTrans
+AvgBlockSize   <- Table$AvgBlockSize
+TransFee   <- Table$TransFee
+MineDif   <- Table$MineDif
+Volume  <- Table$Volume
+
+## Test for variances correlation
+correlation_matrix= cor(subset.matrix (Table, select= - Date), use= "complete.obs" ,
+                        method= 'pearson' )
+
+corrplot (correlation_matrix, method= "ellipse" , type= "lower" ,
+          addCoef.col= 'black' , tl.col= "black" , tl.set= 45 ) 
+# Some correlations are higher than 0.80
+# So exclude NTrans, AvgBlockSize, MineDif and Cl
+
+## Test for Skewness
+## Histogram plots of all variables
+for (i in 2:16){
+  hist(Table[,i], main = paste("Histogram of" , colnames(Table)[i]))
+}  
+
+## Calculate skewness of all variables
+skewness <- data.frame(matrix(, nrow=1, ncol=15))
+for (i in 2:16){
+  x= Table[,i][!is.na(Table[,i])]
+  skewness[1,i-1] <- sum((x-mean(x))^3/sd(x)^3)/length(x)
+  colnames(skewness)[i-1] <- colnames(Table)[i]
+} 
+
+## Test to see if the variable is highly skewed
+abs(skewness)>1
+# MineDif, Volatility, TransFee, Price, Volume, Search, Inflation are highly skewed.
+
+## Take natural logarithm on skewed variables
+LogVolatility   <- log(Volatility)
+LogTransFee   <- log(TransFee)
+Price[Price == 0] <- NA # replace 0 with NA to avoid negative infinite number
+LogPrice   <- log(Price)
+Volume[Volume == 0] <- NA
+LogVolume   <- log(Volume)
+Search[Search == 0] <- NA
+LogSearch   <- log(Search)
+Inflation[Inflation == 0] <- NA
+LogInflation   <- log(Inflation)
+
+## Build model
+Model_1 <- lm(LogPrice ~ JPY_USD + GBP_USD + EUR_USD + LogVolatility 
+              + LogTransFee + LogVolume + LogSearch +  LogInflation + GLD + SP500)
+
+summary(Model_1) # R-square is 97.03%, and
+# 6 significant variances: JPY_USD, EUR_USD, LogTransFee, LogVolume, LogInflation and SP500.
+
+## Anova test
+anova(Model_1)
+# The bigger F value, the lesser error for the model. Bigger F means more 
+# statistically significant related to the response variable
+
+## Breusch–Pagan test for heteroscedasticity
+ncvTest (Model_1)  # P > 0.05, do not reject the null hypothesis, and there is no heteroscedasticity
+
+## Fitted vs residuals plot
+plot(Model_1)             
+
+## Test for multicollinearity
+VIF_1 <- car::vif(Model_1)
+VIF_1 > 10
+
+## Reduced model after removing insignificant variances
+Model_2 <- lm(LogPrice ~ JPY_USD + EUR_USD + LogTransFee + LogVolume + LogInflation + SP500)
+summary(Model_2) # R-square is 97.12%
+# all variables are significant
+anova(Model_2)
+ncvTest (Model_2)  # There is no heteroscedasticity
+plot(Model_2)
+VIF_2 <- car::vif(Model_2)
+VIF_2 > 10 # No multicollinearity
+
+## Calculate SSE, SSR and SST
+# create functions for SSE, SSR and SST
+pre <- function(ssr, sse) ssr / (ssr + sse)
+ssr <- function(model) sum((predict(model) - mean(model$model[, 1]))^2, na.rm = TRUE)
+sse <- function(model) sum(resid(model)^2, na.rm = TRUE)
+sst <- function(model) var(model$model[, 1], na.rm = TRUE) * (nrow(model$model) - 1)
+
+SSR_1 <- ssr(Model_1)
+SSE_1 <- sse(Model_1)
+SST_1 <- sst(Model_1)
+
+SSR_2 <- ssr(Model_2)
+SSE_2 <- sse(Model_2)
+SST_2 <- sst(Model_2)
