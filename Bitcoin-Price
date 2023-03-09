@@ -1,4 +1,5 @@
-######          Market price of Bitcoin         ######
+#!/usr/bin/env r
+
 rm(list = ls())
 
 ## Load all packages
