@@ -1,4 +1,4 @@
-#!/usr/bin/env r
+#!/usr/bin/env RStudio
 
 rm(list = ls())
 
