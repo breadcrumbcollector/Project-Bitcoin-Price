@@ -202,7 +202,7 @@ VIF_1 > 10
 
 ## Reduced model after removing insignificant variances
 Model_2 <- lm(LogPrice ~ JPY_USD + EUR_USD + LogTransFee + LogVolume + LogInflation + SP500)
-summary(Model_2) # R-square is 97.12%
+summary(Model_2)
 # all variables are significant
 anova(Model_2)
 ncvTest (Model_2)  # There is no heteroscedasticity
